@@ -2,7 +2,44 @@
 
 A dual-memory knowledge engine built from **Starter Story** YouTube transcripts. Scrapes founder-interview transcripts, stores them in a vector database (ChromaDB) for semantic search AND a knowledge graph (Neo4j) for structured multi-hop queries, then answers founder questions with evidence-grounded advice, patterns, and generated playbooks.
 
-> Learning project for production RAG: vector DBs, graph DBs (GraphRAG), hybrid retrieval, hallucination guards, and eval-driven quality measurement.
+> Production-RAG patterns in a repo small enough to read end to end: vector + graph
+> dual memory, hybrid retrieval, verified citations, and eval-driven quality
+> measurement. Built as a learning project and kept honest about it.
+
+## Why this exists
+
+Most RAG demos answer confidently and cite nothing. That is fine in a demo and
+disqualifying in production, because a plausible invented citation is worse than no
+answer — the reader cannot tell the difference.
+
+I learned that the expensive way. As a founding engineer at SigIQ I built an AI tutor
+that reached 200,000 students preparing for UPSC, an exam where a wrong fact costs
+somebody a year. A model that invents a source there does not produce a bad user
+experience; it produces a student who learned something false and has no way to know.
+What we ended up with was a rule that sounds austere until you have watched the
+alternative: **no model output reaches a user unless it can point at the source it came
+from.**
+
+This repo is that rule, built small enough to read. The interesting part is not the
+retrieval — it is the layer that refuses to trust the model:
+
+- **Evidence is verified, not assumed.** `src/lib/extraction/evidence-validator.ts`
+  takes every citation the model produced and checks it actually exists in the vector
+  store. Citations that do not resolve get dropped rather than rendered. The model
+  proposes; a deterministic check disposes.
+- **Every external boundary is Zod-validated** — transcripts, LLM output, API input.
+  Structured extraction that does not parse is a failure, not a warning.
+- **Quality is measured, not asserted.** `bun run eval` scores embedding triplet
+  accuracy, retrieval Recall@k / MRR / nDCG / latency, and graph entity
+  recall/precision against a golden set, so a change that makes retrieval worse shows
+  up as a number instead of a vibe.
+- **Two memories, deliberately.** A vector store answers "what is similar to this";
+  a graph answers "which founders who did X later did Y". Most questions worth asking
+  need the second kind, and pure vector RAG cannot do multi-hop.
+
+It is built over Starter Story founder interviews because that corpus is public and
+the questions are real, but the channel is a parameter, not the point. Swap the feed
+and it is a brain for any channel.
 
 ## Architecture
 
@@ -222,6 +259,22 @@ bunx tsc --noEmit    # typecheck
 bun run eval         # quality eval suite
 ```
 
+## Open core
+
+This repository is the engine, and it is genuinely usable on its own — self-host it,
+point it at a channel, query it, and never talk to me.
+
+| Open, MIT, here | Closed |
+|---|---|
+| Ingestion, chunking, embeddings | Multi-tenancy |
+| Vector + graph storage and retrieval | Hosted infrastructure |
+| Evidence validation and guardrails | Embeddable widget |
+| Eval suite and golden set | Dashboard and billing |
+| HTTP API and CLI, single-tenant | |
+
+The boundary is stated here so it is not a surprise later: everything needed to run
+this yourself stays open. What gets sold, if anything gets sold, is not having to.
+
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).
