@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { getDomain, type DomainProfile } from '../domains';
 
 const explorer = new Hono();
 
@@ -7,7 +8,29 @@ const explorer = new Hono();
  * served straight from the API so it always matches the running server.
  * Visualizes the /api/knowledge/ask pipeline stage by stage.
  */
-explorer.get('/', (c) => c.html(EXPLORER_HTML));
+explorer.get('/', (c) => c.html(renderExplorer(getDomain())));
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderExplorer(domain: DomainProfile): string {
+  const presets = domain.exampleQuestions
+    .map(q => `  <span class="preset" onclick="setQ(this)">${escapeHtml(q)}</span>`)
+    .join('\n');
+  const pipeline = domain.graphEnabled
+    ? 'context extraction → pattern layer (Redis/Neo4j) + graph multi-hop (Neo4j) + vector search (ChromaDB) → LLM synthesis'
+    : 'vector search (ChromaDB) → cited LLM synthesis';
+  // function replacers: '$' in questions ("$10k MRR") must not be read as a replacement pattern
+  return EXPLORER_HTML.replace('__DOMAIN_NAME__', () => escapeHtml(domain.name))
+    .replace('__PIPELINE__', () => escapeHtml(pipeline))
+    .replace('__PLACEHOLDER__', () => escapeHtml(domain.questionPlaceholder))
+    .replace('__PRESETS__', () => presets);
+}
 
 const EXPLORER_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -89,19 +112,16 @@ const EXPLORER_HTML = `<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>🧠 Query Explorer</h1>
-<div class="sub">Watch the dual-memory retrieval pipeline work: context extraction → pattern layer (Redis/Neo4j) + graph multi-hop (Neo4j) + vector search (ChromaDB) → LLM synthesis</div>
+<h1>🧠 Query Explorer — __DOMAIN_NAME__</h1>
+<div class="sub">Watch the retrieval pipeline work: __PIPELINE__</div>
 
-<textarea id="question" placeholder="Ask anything about building apps, SaaS, or making revenue… e.g. How do solo technical founders get their first customers for a SaaS?"></textarea>
+<textarea id="question" placeholder="__PLACEHOLDER__"></textarea>
 <div class="row" style="margin-top:10px">
   <input id="apikey" type="password" placeholder="x-api-key (only if API_KEY is set on server)">
   <button id="askBtn" onclick="runQuery()">Ask</button>
 </div>
 <div class="presets">
-  <span class="preset" onclick="setQ(this)">How do solo technical founders validate SaaS ideas?</span>
-  <span class="preset" onclick="setQ(this)">Best marketing strategies with no budget for a mobile app?</span>
-  <span class="preset" onclick="setQ(this)">What tools do successful founders use to build an MVP fast?</span>
-  <span class="preset" onclick="setQ(this)">How long does it take to reach $10k MRR?</span>
+__PRESETS__
 </div>
 
 <div class="error-box" id="errorBox"></div>

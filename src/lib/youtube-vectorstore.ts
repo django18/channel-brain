@@ -3,20 +3,29 @@ import { pipeline } from '@xenova/transformers';
 import { config } from '../config';
 import type { ProcessedTranscript, TranscriptChunk } from './youtube';
 
-let embedder: any = null;
+let embedderPromise: Promise<any> | null = null;
 let chromaClient: ChromaClient | null = null;
-let collection: Collection | null = null;
+// one cached handle per collection: a single server can serve several channels
+const collections = new Map<string, Collection>();
 
 /**
  * Initialize the embedding model (cached)
  */
 async function getEmbedder() {
-  if (!embedder) {
+  // cache the promise, not the result: parallel first calls must share one load
+  if (!embedderPromise) {
     console.log('Loading embedding model...');
-    embedder = await pipeline('feature-extraction', config.embeddingModel);
-    console.log('Embedding model loaded');
+    embedderPromise = pipeline('feature-extraction', config.embeddingModel)
+      .then(model => {
+        console.log('Embedding model loaded');
+        return model;
+      })
+      .catch(error => {
+        embedderPromise = null;
+        throw error;
+      });
   }
-  return embedder;
+  return embedderPromise;
 }
 
 /**
@@ -41,8 +50,11 @@ async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 /**
  * Get or create the ChromaDB collection for YouTube transcripts
  */
-async function getCollection(): Promise<Collection> {
-  if (collection) return collection;
+async function getCollection(
+  collectionName: string = config.youtubeCollectionName
+): Promise<Collection> {
+  const cached = collections.get(collectionName);
+  if (cached) return cached;
 
   if (!chromaClient) {
     chromaClient = new ChromaClient({
@@ -51,8 +63,8 @@ async function getCollection(): Promise<Collection> {
   }
 
   try {
-    collection = await chromaClient.getOrCreateCollection({
-      name: config.youtubeCollectionName,
+    const collection = await chromaClient.getOrCreateCollection({
+      name: collectionName,
       metadata: {
         description: 'YouTube video transcripts with semantic embeddings',
         'hnsw:space': 'cosine',
@@ -69,13 +81,13 @@ async function getCollection(): Promise<Collection> {
       );
     }
 
-    console.log(`✓ Connected to collection: ${config.youtubeCollectionName} (provider=${config.embeddingModel})`);
+    console.log(`✓ Connected to collection: ${collectionName} (provider=${config.embeddingModel})`);
+    collections.set(collectionName, collection);
+    return collection;
   } catch (error) {
     console.error('Failed to connect to ChromaDB:', error);
     throw new Error(`ChromaDB connection failed: ${error}`);
   }
-
-  return collection;
 }
 
 /**
@@ -170,9 +182,10 @@ export interface SearchResult {
  */
 export async function searchVectorDB(
   query: string,
-  limit: number = 5
+  limit: number = 5,
+  collectionName: string = config.youtubeCollectionName
 ): Promise<SearchResult[]> {
-  const coll = await getCollection();
+  const coll = await getCollection(collectionName);
 
   console.log(`Searching for: "${query}"`);
 
@@ -223,14 +236,16 @@ export async function searchVectorDB(
 /**
  * Get collection statistics
  */
-export async function getCollectionStats() {
-  const coll = await getCollection();
+export async function getCollectionStats(
+  collectionName: string = config.youtubeCollectionName
+) {
+  const coll = await getCollection(collectionName);
 
   const count = await coll.count();
 
   return {
     totalChunks: count,
-    collectionName: config.youtubeCollectionName,
+    collectionName,
   };
 }
 

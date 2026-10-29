@@ -3,10 +3,11 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { dirname, resolve } from 'path';
+import { config } from '../config';
 
-const DATA_DIR = join(process.cwd(), 'data', 'youtube');
-const TRACKER_FILE = join(DATA_DIR, 'scraped-videos.json');
+const TRACKER_FILE = resolve(process.cwd(), config.youtubeTrackerFile);
+const DATA_DIR = dirname(TRACKER_FILE);
 
 export interface ScrapedVideoRecord {
   videoId: string;

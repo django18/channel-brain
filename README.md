@@ -183,6 +183,47 @@ RETURN st.name, count(r) AS uses ORDER BY uses DESC LIMIT 10
 
 CLI: `bun run eval` — measures embedding triplet accuracy, retrieval Recall@k/MRR/nDCG/latency, graph entity recall/precision. See [eval/README.md](eval/README.md).
 
+## Channel Terminal (multi-channel chat UI)
+
+One server serves every channel in [`channels.json`](channels.json). Open
+**http://localhost:3100/app**, pick a channel, and ask it anything:
+
+- answers cite numbered, timestamped transcript excerpts; citations jump to the source list
+- suggested questions rotate (curated per domain + drawn from real video titles)
+- recent searches per browser (anonymous `x-client-id`, Redis-backed, 90-day TTL)
+- follow-ups keep context; `/help` lists terminal commands
+
+Add a channel: ingest it into its own collection + tracker (see below), then add an
+entry to `channels.json` with a `domain` from `src/domains/`.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/channels` | GET | Channels with video + chunk counts |
+| `/api/channels/:id/suggestions` | GET | Rotating starter questions |
+| `/api/channels/:id/recent` | GET / DELETE | This browser's recent questions (`x-client-id`) |
+| `/api/channels/:id/ask` | POST | `{ question, history? }` → cited answer |
+
+## Second corpus: InterNACHI home inspection
+
+The same engine serves the [InterNACHI](https://www.youtube.com/@internachi) channel
+(~3,600 videos, ~1,400 hours) as a separate, vector-only knowledge base. A **domain
+profile** (`src/domains/`, selected by `KNOWLEDGE_DOMAIN`) switches the synthesis voice
+and turns off the founder graph, which does not apply to inspection content. Corpora
+stay isolated: own Chroma collection, own tracker file, own Redis queue prefix.
+
+```bash
+# list the channel once (the in-app scraper can't paginate 3k+ videos without an API key)
+yt-dlp --flat-playlist --print "%(id)s|%(title)s|%(duration)s" \
+  "https://www.youtube.com/@internachi/videos" > data/youtube/internachi-videos.txt
+
+bun run ingest:internachi        # resumable, throttled, backs off on YouTube rate limits
+bun run start:internachi         # API + explorer on http://localhost:3101/explorer
+```
+
+`/api/knowledge/ask` answers with numbered `[n]` citations to timestamped transcript
+excerpts and says so when the excerpts don't cover the question. Only ChromaDB (and
+Redis) are needed for this domain; Neo4j is skipped.
+
 ## Security
 
 - **Auth**: set `API_KEY` in env → all `/api/*` routes require `x-api-key` header (constant-time comparison). Unset = open (local dev).

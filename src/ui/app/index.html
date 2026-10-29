@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Channel Knowledge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app/app.css">
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" aria-label="Channels and history">
+    <div class="brand">Channel Knowledge</div>
+    <div class="topbar-meta" id="topbarMeta">Loading…</div>
+
+    <section class="side-section">
+      <h2 class="side-title">Channels</h2>
+      <div class="channel-list" id="channelList" role="listbox" aria-label="Choose a channel">
+        <div class="muted small">Loading channels…</div>
+      </div>
+    </section>
+
+    <section class="side-section side-recent">
+      <div class="side-head">
+        <h2 class="side-title">Recent</h2>
+        <button class="link-btn" id="clearRecent" type="button">Clear</button>
+      </div>
+      <ol class="recent-list" id="recentList"><li class="muted small">No searches yet</li></ol>
+    </section>
+  </aside>
+
+  <main class="chat" aria-label="Chat">
+    <header class="chat-head">
+      <div>
+        <div class="chat-title" id="termPath">Select a channel</div>
+        <div class="chat-sub" id="chatSub"></div>
+      </div>
+      <span class="status" id="termStatus"></span>
+    </header>
+
+    <div class="log" id="log" aria-live="polite"></div>
+
+    <div class="composer-wrap">
+      <form class="composer" id="promptForm" autocomplete="off">
+        <label class="sr-only" for="promptInput">Your question</label>
+        <input id="promptInput" name="q" type="text" maxlength="1000" placeholder="Ask a question…">
+        <button type="submit" class="send-btn" id="enterBtn" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </form>
+      <div class="composer-hint">Answers come only from this channel's videos, with timestamped sources.</div>
+    </div>
+  </main>
+</div>
+
+<script src="/app/markdown.js"></script>
+<script src="/app/app.js"></script>
+</body>
+</html>

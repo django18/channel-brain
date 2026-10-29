@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
+    "start:internachi": "KNOWLEDGE_DOMAIN=home-inspection YOUTUBE_COLLECTION_NAME=internachi_transcripts YOUTUBE_TRACKER_FILE=./data/youtube/internachi-scraped.json QUEUE_PREFIX=internachi PORT=3101 bun run src/index.ts",
+    "ingest:internachi": "KNOWLEDGE_DOMAIN=home-inspection YOUTUBE_COLLECTION_NAME=internachi_transcripts YOUTUBE_TRACKER_FILE=./data/youtube/internachi-scraped.json QUEUE_PREFIX=internachi bun run scripts/ingest-video-list.ts data/youtube/internachi-videos.txt",
     "build": "bun build src/index.ts --outdir ./dist --target bun",
     "test": "bun test",
     "eval": "bun run scripts/run-eval.ts",

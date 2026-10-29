@@ -5,6 +5,8 @@ import youtubeRouter from './routes/youtube';
 import knowledgeRouter from './routes/knowledge';
 import evalRouter from './routes/eval';
 import explorerRouter from './routes/explorer';
+import channelsRouter from './routes/channels';
+import appRouter from './routes/app';
 import { config } from './config';
 import { startWorker } from './lib/queue/worker';
 import { initGraph } from './lib/extraction/graph-store';
@@ -41,7 +43,14 @@ app.get('/', (c) =>
         latest: 'GET /api/eval/latest',
         history: 'GET /api/eval/history',
       },
+      channels: {
+        list: 'GET /api/channels',
+        suggestions: 'GET /api/channels/:id/suggestions',
+        recent: 'GET|DELETE /api/channels/:id/recent (x-client-id)',
+        ask: 'POST /api/channels/:id/ask',
+      },
       ui: {
+        app: 'GET /app',
         explorer: 'GET /explorer',
       },
     },
@@ -54,8 +63,10 @@ app.get('/health', (c) =>
 
 app.route('/api', youtubeRouter);
 app.route('/api/knowledge', knowledgeRouter);
+app.route('/api/channels', channelsRouter);
 app.route('/api/eval', evalRouter);
 app.route('/explorer', explorerRouter);
+app.route('/app', appRouter);
 
 console.log(`🚀 Server starting on port ${config.port}`);
 console.log(`📊 ChromaDB URL: ${config.chromaUrl}`);

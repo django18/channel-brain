@@ -5,6 +5,14 @@ import { getPatterns, relaxationLevels, type ContextPatterns } from '../patterns
 import { extractQueryContextDetailed } from './context-extractor';
 import { QueryContextSchema, type QueryContext } from '../schemas/context';
 import { getLLM, hasLLM, llmModels, stripReasoning, reasoningRequestOverrides } from '../llm';
+import { getDomain, type DomainProfile } from '../../domains';
+import { askVectorOnly, type VectorAskOptions } from './vector-advisor';
+import { config } from '../../config';
+
+export interface AskOptions extends VectorAskOptions {
+  /** Defaults to the server's KNOWLEDGE_DOMAIN profile. */
+  domain?: DomainProfile;
+}
 
 export interface TraceStage {
   stage: string;
@@ -158,18 +166,6 @@ function toNumber(value: unknown): number | null {
   return null;
 }
 
-const SYNTHESIS_SYSTEM_PROMPT = `You are a startup advisor powered by data from 200+ founder interviews (Starter Story).
-
-ALWAYS:
-- Reference specific founders and startups from the provided data
-- Cite usage counts and success rates from the patterns
-- Give step-by-step, actionable advice
-- Mention source videos when available
-
-NEVER:
-- Give generic advice not grounded in the data
-- Invent founders, numbers, or outcomes not present in the input`;
-
 /**
  * Main advisor pipeline:
  * 1. Extract structured context from the question
@@ -180,8 +176,15 @@ NEVER:
  */
 export async function ask(
   question: string,
-  explicitContext?: unknown
+  explicitContext?: unknown,
+  options: AskOptions = {}
 ): Promise<AdvisorAnswer> {
+  const domain = options.domain ?? getDomain();
+  const collectionName = options.collectionName ?? config.youtubeCollectionName;
+  if (!domain.graphEnabled) {
+    return askVectorOnly(question, domain, { collectionName, history: options.history });
+  }
+
   const askStart = performance.now();
   const stages: TraceStage[] = [];
 
@@ -237,7 +240,7 @@ export async function ask(
     }),
     timed(async () => {
       try {
-        return { value: await searchVectorDB(question, 8), failed: false };
+        return { value: await searchVectorDB(question, 8, collectionName), failed: false };
       } catch (error) {
         console.warn('Vector search failed:', error);
         return { value: [] as SearchResult[], failed: true };
@@ -350,7 +353,7 @@ TASK: Answer the question with:
       getLLM().chat.completions.create({
         model: llmModels().synthesis,
         messages: [
-          { role: 'system', content: SYNTHESIS_SYSTEM_PROMPT },
+          { role: 'system', content: domain.synthesisSystemPrompt },
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.3,

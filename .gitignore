@@ -40,3 +40,8 @@ Thumbs.db
 # Testing
 coverage/
 .nyc_output/
+.gstack/
+
+# Per-channel ingest state (regenerable; keep third-party channel data out of the repo)
+data/youtube/*-scraped.json
+data/youtube/*-videos.txt

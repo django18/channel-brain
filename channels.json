@@ -1,0 +1,22 @@
+[
+  {
+    "id": "internachi",
+    "name": "InterNACHI",
+    "handle": "@internachi",
+    "channelUrl": "https://www.youtube.com/@internachi",
+    "topic": "Home inspection",
+    "domain": "home-inspection",
+    "collection": "internachi_transcripts",
+    "trackerFile": "./data/youtube/internachi-scraped.json"
+  },
+  {
+    "id": "starter-story",
+    "name": "Starter Story",
+    "handle": "@starterstory",
+    "channelUrl": "https://www.youtube.com/@starterstory",
+    "topic": "Founder interviews",
+    "domain": "startup",
+    "collection": "youtube_transcripts",
+    "trackerFile": "./data/youtube/scraped-videos.json"
+  }
+]

@@ -17,6 +17,19 @@ export const config = {
   // YouTube collection in Chroma
   youtubeCollectionName: process.env.YOUTUBE_COLLECTION_NAME || 'youtube_transcripts',
 
+  // Scraped-video tracker (one per corpus, so instances don't skip each other's videos)
+  youtubeTrackerFile: process.env.YOUTUBE_TRACKER_FILE || './data/youtube/scraped-videos.json',
+
+  // Domain profile: 'startup' (Starter Story, graph + vector) or
+  // 'home-inspection' (InterNACHI, vector-only). See src/domains/.
+  domain: process.env.KNOWLEDGE_DOMAIN || 'startup',
+
+  // Channels the app serves (each: own collection, tracker, domain profile)
+  channelsFile: process.env.CHANNELS_FILE || './channels.json',
+
+  // Redis key prefix for the job queue, so instances on one Redis don't share jobs
+  queuePrefix: process.env.QUEUE_PREFIX || 'knowledge_engine',
+
   // Neo4j
   neo4jUri: process.env.NEO4J_URI || 'bolt://localhost:7687',
   neo4jUser: process.env.NEO4J_USER || 'neo4j',

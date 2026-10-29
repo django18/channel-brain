@@ -1,5 +1,6 @@
 import { getRedis } from './redis';
 import { v4 as uuidv4 } from 'uuid';
+import { config } from '../../config';
 
 export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -16,10 +17,10 @@ export interface Job<T = any> {
   updatedAt: string;
 }
 
-const JOBS_KEY = 'knowledge_engine:jobs';
-const QUEUE_KEY = 'knowledge_engine:queue';
-const PROCESSING_KEY = 'knowledge_engine:processing';
-const HEARTBEAT_KEY = 'knowledge_engine:heartbeats';
+const JOBS_KEY = `${config.queuePrefix}:jobs`;
+const QUEUE_KEY = `${config.queuePrefix}:queue`;
+const PROCESSING_KEY = `${config.queuePrefix}:processing`;
+const HEARTBEAT_KEY = `${config.queuePrefix}:heartbeats`;
 
 const VISIBILITY_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
