@@ -9,6 +9,7 @@ const UI_DIR = join(import.meta.dir, '..', 'ui', 'app');
 const ASSETS: Record<string, string> = {
   'app.css': 'text/css; charset=utf-8',
   'app.js': 'text/javascript; charset=utf-8',
+  'add-channel.js': 'text/javascript; charset=utf-8',
   'markdown.js': 'text/javascript; charset=utf-8',
 };
 

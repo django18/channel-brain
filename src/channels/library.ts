@@ -40,6 +40,11 @@ export function getLibrary(channel: Channel): LibraryVideo[] {
   return videos;
 }
 
+/** Drop the cached library so the next read sees newly indexed videos. */
+export function invalidateLibrary(channelId: string): void {
+  cache.delete(channelId);
+}
+
 function sample<T>(items: T[], count: number): T[] {
   const pool = [...items];
   const picked: T[] = [];

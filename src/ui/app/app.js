@@ -7,6 +7,8 @@
 
   var STORAGE = { clientId: 'ct.clientId', apiKey: 'ct.apiKey', channel: 'ct.channel' };
   var HISTORY_TURNS_SENT = 6;
+  var POLL_MS = 4000;
+  var BUSY_STATUSES = ['queued', 'listing', 'indexing'];
   var THINKING_STEPS = ['Understanding your question', 'Searching {chunks} transcript passages', 'Reading the best matches', 'Writing a cited answer'];
 
   var esc = window.Markdown.escapeHtml;
@@ -24,6 +26,8 @@
     path: document.getElementById('termPath'),
     status: document.getElementById('termStatus'),
     topMeta: document.getElementById('topbarMeta'),
+    addChannel: document.getElementById('addChannelBtn'),
+    headActions: document.getElementById('headActions'),
   };
 
   var state = {
@@ -36,6 +40,8 @@
     booting: false,
     recall: { items: [], index: -1 },
     msgSeq: 0,
+    pollTimer: null,
+    confirmRemove: false,
   };
 
   // ---------- storage (every access may throw in private mode) ----------
@@ -74,15 +80,16 @@
         return res.json().catch(function () { return {}; }).then(function (json) {
           if (res.status === 401) throw apiError('This server needs an API key. Type /key <your-key>.', 401);
           if (res.status === 429) throw apiError('Too many questions in a short time. Wait a minute and try again.', 429);
-          if (!res.ok || json.success === false) throw apiError(json.error || ('Request failed (' + res.status + ')'), res.status);
+          if (!res.ok || json.success === false) throw apiError(json.error || ('Request failed (' + res.status + ')'), res.status, json.data);
           return json.data;
         });
       });
   }
 
-  function apiError(message, status) {
+  function apiError(message, status, data) {
     var error = new Error(message);
     error.status = status;
+    error.data = data;
     return error;
   }
 
@@ -111,13 +118,30 @@
     return (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toUpperCase();
   }
 
+  function isBuilding(c) { return BUSY_STATUSES.indexOf(c.status) >= 0; }
+
+  function percent(c) {
+    var p = c.progress;
+    return p && p.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0;
+  }
+
+  function channelSubline(c) {
+    if (c.status === 'queued') return 'Waiting to start…';
+    if (c.status === 'listing') return 'Finding videos…';
+    if (c.status === 'indexing') return 'Indexing ' + (c.progress ? c.progress.done + ' of ' + c.progress.total : '') + ' videos';
+    if (c.status === 'paused') return '<span class="warn">Paused</span>';
+    if (c.status === 'failed') return '<span class="bad">Failed</span>';
+    return esc(c.topic) + ' · ' + formatCount(c.videos) + ' videos';
+  }
+
   function renderChannels() {
     el.channelList.innerHTML = state.channels.map(function (c) {
       var selected = state.current && state.current.id === c.id;
       return '<button type="button" class="channel" role="option" data-id="' + esc(c.id) + '" aria-selected="' + selected + '">' +
         '<span class="channel-avatar" aria-hidden="true">' + esc(initials(c.name)) + '</span>' +
         '<span class="channel-name">' + esc(c.name) + '</span>' +
-        '<span class="channel-sub">' + esc(c.topic) + ' · ' + formatCount(c.videos) + ' videos</span>' +
+        '<span class="channel-sub">' + channelSubline(c) + '</span>' +
+        (isBuilding(c) ? '<span class="channel-bar" aria-hidden="true"><i style="width:' + percent(c) + '%"></i></span>' : '') +
         '</button>';
     }).join('');
   }
@@ -133,6 +157,8 @@
     el.path.textContent = channel.name;
     el.sub.innerHTML = '<a href="' + esc(channel.channelUrl) + '" target="_blank" rel="noopener">' + esc(channel.handle) + '</a> · ' + esc(channel.topic);
     el.input.placeholder = 'Ask ' + channel.name + ' a question…';
+    state.confirmRemove = false;
+    renderHeadActions();
     document.title = channel.name + ' · Channel Knowledge';
     renderChannels();
     renderLog();
@@ -198,10 +224,40 @@
     return '<section class="welcome">' +
       '<h1>' + esc(c.name) + '</h1>' +
       '<p>' + esc(c.description) + '.</p>' +
-      '<p class="stats-line">' + formatCount(c.videos) + ' videos · ' + formatCount(c.chunks) + ' searchable passages</p>' +
+      '<p class="stats-line" id="statsLine">' + statsLine(c) + '</p>' +
+      '<div id="buildNotice">' + buildNotice(c) + '</div>' +
       '<div class="suggest-head"><span class="label">Suggested questions</span><button type="button" class="link-btn" data-action="reshuffle">Show others</button></div>' +
       '<div class="suggestions" id="suggestions"><span class="muted small">Loading…</span></div>' +
       '</section>';
+  }
+
+  function statsLine(c) {
+    return formatCount(c.videos) + ' videos · ' + formatCount(c.chunks) + ' searchable passages';
+  }
+
+  function buildNotice(c) {
+    if (isBuilding(c)) {
+      var p = c.progress;
+      var detail = c.status === 'indexing' && p
+        ? p.done + ' of ' + p.total + ' videos processed' + (p.failed ? ' (' + p.failed + ' without transcripts)' : '')
+        : c.status === 'listing' ? 'Finding the channel\'s videos' : 'Waiting for another channel to finish';
+      return '<div class="notice"><div class="notice-title">Building this knowledge base</div>' +
+        '<div class="notice-text">' + esc(detail) + '. You can ask questions now; answers get better as more videos are added.</div>' +
+        '<div class="progress"><i style="width:' + percent(c) + '%"></i></div></div>';
+    }
+    if (c.status === 'paused' || c.status === 'failed') {
+      return '<div class="notice notice-warn"><div class="notice-title">' + (c.status === 'paused' ? 'Indexing paused' : 'Indexing stopped') + '</div>' +
+        '<div class="notice-text">' + esc(c.error || 'Something went wrong while indexing.') + '</div>' +
+        '<button type="button" class="btn btn-small" data-action="resume">Resume indexing</button></div>';
+    }
+    return '';
+  }
+
+  function renderHeadActions() {
+    var c = state.current;
+    if (!c || !c.userAdded) { el.headActions.innerHTML = ''; return; }
+    el.headActions.innerHTML = '<button type="button" class="btn btn-ghost btn-small' + (state.confirmRemove ? ' btn-danger' : '') + '" data-action="remove">' +
+      (state.confirmRemove ? 'Click again to remove' : 'Remove channel') + '</button>';
   }
 
   function renderLog() {
@@ -417,6 +473,19 @@
     if (button && !state.busy) selectChannel(button.dataset.id);
   });
 
+  el.addChannel.addEventListener('click', function () { window.AddChannel.open(); });
+
+  el.headActions.addEventListener('click', function (event) {
+    if (!event.target.closest('[data-action="remove"]') || !state.current) return;
+    if (!state.confirmRemove) {
+      state.confirmRemove = true;
+      renderHeadActions();
+      setTimeout(function () { state.confirmRemove = false; renderHeadActions(); }, 4000);
+      return;
+    }
+    removeChannel(state.current);
+  });
+
   el.recentList.addEventListener('click', function (event) {
     var button = event.target.closest('button[data-q]');
     if (button) ask(button.dataset.q);
@@ -433,6 +502,7 @@
     var suggestion = event.target.closest('.suggestion');
     if (suggestion) return ask(suggestion.dataset.q);
     if (event.target.closest('[data-action="reshuffle"]')) return loadSuggestions();
+    if (event.target.closest('[data-action="resume"]')) return resumeChannel(state.current);
     var cite = event.target.closest('.cite');
     if (cite) {
       var target = document.getElementById(cite.getAttribute('href').slice(1));
@@ -447,20 +517,79 @@
 
   // ---------- boot ----------
 
+  // ---------- channel lifecycle ----------
+
+  function applyChannels(channels) {
+    state.channels = channels;
+    var total = channels.reduce(function (sum, c) { return sum + (c.videos || 0); }, 0);
+    el.topMeta.textContent = channels.length + ' channels · ' + total.toLocaleString() + ' videos';
+    if (state.current) {
+      var fresh = channels.find(function (c) { return c.id === state.current.id; });
+      if (fresh) {
+        var wasBuilding = isBuilding(state.current);
+        state.current = fresh;
+        var stats = document.getElementById('statsLine');
+        var notice = document.getElementById('buildNotice');
+        if (stats) stats.textContent = statsLine(fresh);
+        if (notice) notice.innerHTML = buildNotice(fresh);
+        if (wasBuilding && !isBuilding(fresh)) loadSuggestions();
+      }
+    }
+    renderChannels();
+    schedulePoll();
+  }
+
+  function refreshChannels() {
+    return api('/api/channels').then(applyChannels);
+  }
+
+  function schedulePoll() {
+    clearTimeout(state.pollTimer);
+    if (!state.channels.some(isBuilding)) return;
+    state.pollTimer = setTimeout(function () {
+      refreshChannels().catch(function (error) { console.warn('channel refresh failed', error); schedulePoll(); });
+    }, POLL_MS);
+  }
+
+  function resumeChannel(channel) {
+    if (!channel) return;
+    api('/api/channels/' + encodeURIComponent(channel.id) + '/resume', { method: 'POST' })
+      .then(refreshChannels)
+      .catch(function (error) { system(error.message, true); });
+  }
+
+  function removeChannel(channel) {
+    api('/api/channels/' + encodeURIComponent(channel.id), { method: 'DELETE' })
+      .then(function () {
+        delete state.conversations[channel.id];
+        state.current = null;
+        return refreshChannels();
+      })
+      .then(function () {
+        if (state.channels.length) selectChannel(state.channels[0].id);
+      })
+      .catch(function (error) { system(error.message, true); });
+  }
+
+  window.AddChannel.init({
+    api: api,
+    onCreated: function (channel) {
+      refreshChannels().then(function () { selectChannel(channel.id); });
+    },
+  });
+
   function boot() {
     state.booting = true;
     api('/api/channels')
       .then(function (channels) {
-        state.channels = channels;
-        var total = channels.reduce(function (sum, c) { return sum + (c.videos || 0); }, 0);
-        el.topMeta.textContent = channels.length + ' channels · ' + total.toLocaleString() + ' videos';
+        applyChannels(channels);
         var fromUrl = new URLSearchParams(location.search).get('channel');
         var preferred = [fromUrl, load(STORAGE.channel), channels[0] && channels[0].id];
         for (var i = 0; i < preferred.length; i++) {
           if (preferred[i] && selectChannel(preferred[i])) return;
         }
         el.log.innerHTML = '';
-        system('No channels configured yet. Add one to channels.json.', true);
+        system('No channels yet. Use "Add channel" to create your first knowledge base.');
       })
       .catch(function (error) {
         setStatus('Offline', 'error');

@@ -94,9 +94,10 @@ async function getCollection(
  * Store processed transcripts in the vector database
  */
 export async function storeInVectorDB(
-  transcripts: ProcessedTranscript[]
+  transcripts: ProcessedTranscript[],
+  collectionName: string = config.youtubeCollectionName
 ): Promise<void> {
-  const coll = await getCollection();
+  const coll = await getCollection(collectionName);
 
   // Flatten all chunks from all transcripts
   const allChunks = transcripts.flatMap(t => t.chunks);
@@ -264,5 +265,21 @@ export async function clearCollection(): Promise<void> {
     });
 
     console.log(`Deleted ${results.ids.length} chunks from collection`);
+  }
+}
+
+/**
+ * Drop a whole collection (used when a user removes a channel they added).
+ * Missing collections are not an error.
+ */
+export async function deleteCollection(collectionName: string): Promise<void> {
+  if (!chromaClient) {
+    chromaClient = new ChromaClient({ path: config.chromaUrl });
+  }
+  collections.delete(collectionName);
+  try {
+    await chromaClient.deleteCollection({ name: collectionName });
+  } catch (error) {
+    if (!String(error).toLowerCase().includes('does not exist')) throw error;
   }
 }

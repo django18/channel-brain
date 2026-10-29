@@ -26,6 +26,12 @@ export const config = {
 
   // Channels the app serves (each: own collection, tracker, domain profile)
   channelsFile: process.env.CHANNELS_FILE || './channels.json',
+  // Channels added from the app at runtime (status + progress live here too)
+  userChannelsFile: process.env.USER_CHANNELS_FILE || './data/channels.user.json',
+  // yt-dlp lists a channel's videos when one is added from the app
+  ytDlpPath: process.env.YT_DLP_PATH || 'yt-dlp',
+  // Upper bound on videos indexed per added channel
+  maxVideosPerChannel: parseInt(process.env.MAX_VIDEOS_PER_CHANNEL || '5000'),
 
   // Redis key prefix for the job queue, so instances on one Redis don't share jobs
   queuePrefix: process.env.QUEUE_PREFIX || 'knowledge_engine',

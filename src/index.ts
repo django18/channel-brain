@@ -7,6 +7,7 @@ import evalRouter from './routes/eval';
 import explorerRouter from './routes/explorer';
 import channelsRouter from './routes/channels';
 import appRouter from './routes/app';
+import { resumeUnfinishedIndexing } from './channels/indexer';
 import { config } from './config';
 import { startWorker } from './lib/queue/worker';
 import { initGraph } from './lib/extraction/graph-store';
@@ -45,6 +46,9 @@ app.get('/', (c) =>
       },
       channels: {
         list: 'GET /api/channels',
+        add: 'POST /api/channels { channelUrl, maxVideos?, topic? }',
+        resume: 'POST /api/channels/:id/resume',
+        remove: 'DELETE /api/channels/:id',
         suggestions: 'GET /api/channels/:id/suggestions',
         recent: 'GET|DELETE /api/channels/:id/recent (x-client-id)',
         ask: 'POST /api/channels/:id/ask',
@@ -72,6 +76,12 @@ console.log(`🚀 Server starting on port ${config.port}`);
 console.log(`📊 ChromaDB URL: ${config.chromaUrl}`);
 console.log(`🤖 Embedding: ${config.embeddingModel}`);
 console.log(`🕸️  Neo4j URI: ${config.neo4jUri}`);
+
+try {
+  resumeUnfinishedIndexing();
+} catch (err) {
+  console.error('Could not resume channel indexing:', err);
+}
 
 initGraph()
   .catch((err) => console.error('Neo4j init failed (continuing):', err))

@@ -193,12 +193,24 @@ One server serves every channel in [`channels.json`](channels.json). Open
 - recent searches per browser (anonymous `x-client-id`, Redis-backed, 90-day TTL)
 - follow-ups keep context; `/help` lists terminal commands
 
-Add a channel: ingest it into its own collection + tracker (see below), then add an
-entry to `channels.json` with a `domain` from `src/domains/`.
+**Add a channel from the app:** click **+ Add channel**, paste a channel link or
+`@handle`, choose how many recent videos to index. The server lists the channel with
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) (must be on `PATH`, or set `YT_DLP_PATH`),
+then builds its knowledge base in the background, one channel at a time (~10
+videos/minute). Progress shows live; you can ask while it builds. Unfinished channels
+resume when the server restarts, rate-limited ones pause with a **Resume** button, and
+channels added this way can be removed (index and ledger are deleted too). They are
+stored in `data/channels.user.json` and use a generic grounded-answer profile.
+
+**Built-in channels** live in `channels.json` with a domain profile from `src/domains/`
+and are ingested from the CLI (see below).
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/api/channels` | GET | Channels with video + chunk counts |
+| `/api/channels` | GET | Channels with status, progress, video + chunk counts |
+| `/api/channels` | POST | `{ channelUrl, maxVideos?, topic? }` → add and start indexing (202) |
+| `/api/channels/:id/resume` | POST | Resume a paused/failed channel |
+| `/api/channels/:id` | DELETE | Remove a channel added in the app |
 | `/api/channels/:id/suggestions` | GET | Rotating starter questions |
 | `/api/channels/:id/recent` | GET / DELETE | This browser's recent questions (`x-client-id`) |
 | `/api/channels/:id/ask` | POST | `{ question, history? }` → cited answer |
