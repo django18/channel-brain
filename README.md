@@ -215,6 +215,52 @@ and are ingested from the CLI (see below).
 | `/api/channels/:id/recent` | GET / DELETE | This browser's recent questions (`x-client-id`) |
 | `/api/channels/:id/ask` | POST | `{ question, history? }` → cited answer |
 
+## For agents: knowledge API + MCP
+
+Every indexed channel is one knowledge base your agents can query, through two doors.
+Every search names its channels (`channels`, one or more ids from `list_channels`);
+you can query several at once, and every passage carries a link that opens the video
+at that exact moment.
+
+### MCP (Claude Code, Claude Desktop, any MCP client)
+
+Streamable HTTP at **`/mcp`** (stateless). Tools:
+
+| Tool | Use it to |
+|---|---|
+| `list_channels` | see channel ids, topics, video counts |
+| `search_knowledge` | get the most relevant transcript passages (no LLM, fast) |
+| `ask_knowledge` | get a written answer with `[n]` citations plus the passages |
+| `get_video_transcript` | read a whole video when one passage isn't enough |
+
+```bash
+# Claude Code
+claude mcp add --transport http channel-knowledge http://localhost:3100/mcp
+# with API_KEY set on the server
+claude mcp add --transport http channel-knowledge https://your-host/mcp \
+  --header "Authorization: Bearer $API_KEY"
+```
+
+### REST
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/kb/channels` | channel ids, topics, status, video counts |
+| `POST /api/kb/search` | `{ query, channels, limit?, minSimilarity? }` → ranked passages |
+| `POST /api/kb/ask` | `{ question, channels, history? }` → cited answer + passages |
+| `GET /api/kb/channels/:channelId/videos/:videoId` | full transcript as ordered passages |
+| `GET /api/kb/openapi.json` | OpenAPI 3.1, generated from the request schemas (plug into function calling / LangChain / OpenAI Actions) |
+
+```bash
+curl -X POST localhost:3100/api/kb/search -H 'Content-Type: application/json' \
+  -d '{"query":"water heater TPR valve discharge","channels":["internachi"],"limit":5}'
+```
+
+Passage shape: `{ id, channel:{id,name}, video:{id,title,url}, timestamp, startSeconds, url, text, similarity }`.
+Responses use the usual `{ success, data | error }` envelope; unknown channel ids return
+404 with the list of valid ids; a missing or empty `channels` is a 400. Auth: when
+`API_KEY` is set, send `x-api-key` or `Authorization: Bearer`.
+
 ## Second corpus: InterNACHI home inspection
 
 The same engine serves the [InterNACHI](https://www.youtube.com/@internachi) channel

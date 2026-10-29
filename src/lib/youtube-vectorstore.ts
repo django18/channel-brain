@@ -186,52 +186,89 @@ export async function searchVectorDB(
   limit: number = 5,
   collectionName: string = config.youtubeCollectionName
 ): Promise<SearchResult[]> {
-  const coll = await getCollection(collectionName);
-
-  console.log(`Searching for: "${query}"`);
-
-  // Generate query embedding
   const queryEmbedding = await generateEmbedding(query);
+  return queryCollection(collectionName, queryEmbedding, limit);
+}
 
-  // Query ChromaDB
+/**
+ * Search several collections with one query embedding. Results carry their
+ * collection name; similarities are comparable across collections because
+ * every collection uses the same embedder and cosine space.
+ */
+export async function searchCollections(
+  query: string,
+  collectionNames: string[],
+  limitPerCollection: number
+): Promise<Array<SearchResult & { collection: string }>> {
+  const queryEmbedding = await generateEmbedding(query);
+  const perCollection = await Promise.all(
+    collectionNames.map(async name => {
+      const results = await queryCollection(name, queryEmbedding, limitPerCollection);
+      return results.map(result => ({ ...result, collection: name }));
+    })
+  );
+  return perCollection.flat();
+}
+
+async function queryCollection(
+  collectionName: string,
+  queryEmbedding: number[],
+  limit: number
+): Promise<SearchResult[]> {
+  const coll = await getCollection(collectionName);
   const results = await coll.query({
     queryEmbeddings: [queryEmbedding],
     nResults: limit,
     include: [IncludeEnum.Documents, IncludeEnum.Metadatas, IncludeEnum.Distances],
   });
+  const ids = results.ids?.[0] ?? [];
+  return ids.flatMap((id, i) => {
+    const metadata = results.metadatas?.[0]?.[i] as Record<string, any> | null | undefined;
+    const document = results.documents?.[0]?.[i];
+    const distance = results.distances?.[0]?.[i];
+    if (!metadata || !document) return [];
+    return [toSearchResult(id, document, metadata, distance !== undefined && distance !== null ? 1 - distance : 0)];
+  });
+}
 
-  const searchResults: SearchResult[] = [];
+function toSearchResult(
+  id: string,
+  document: string,
+  metadata: Record<string, any>,
+  similarity: number
+): SearchResult {
+  return {
+    id,
+    videoId: metadata.videoId,
+    videoTitle: metadata.videoTitle,
+    videoUrl: metadata.videoUrl,
+    text: document,
+    startTime: metadata.startTime,
+    endTime: metadata.endTime,
+    timestamp: metadata.timestamp,
+    similarity,
+    metadata: {
+      channelTitle: metadata.channelTitle,
+      thumbnailUrl: metadata.thumbnailUrl,
+      chunkIndex: metadata.chunkIndex,
+    },
+  };
+}
 
-  if (results.ids && results.ids[0]) {
-    for (let i = 0; i < results.ids[0].length; i++) {
-      const metadata = results.metadatas?.[0]?.[i] as any;
-      const document = results.documents?.[0]?.[i];
-      const distance = results.distances?.[0]?.[i];
-
-      if (metadata && document) {
-        searchResults.push({
-          id: results.ids[0][i],
-          videoId: metadata.videoId,
-          videoTitle: metadata.videoTitle,
-          videoUrl: metadata.videoUrl,
-          text: document,
-          startTime: metadata.startTime,
-          endTime: metadata.endTime,
-          timestamp: metadata.timestamp,
-          similarity: distance !== undefined ? 1 - distance : 0,
-          metadata: {
-            channelTitle: metadata.channelTitle,
-            thumbnailUrl: metadata.thumbnailUrl,
-            chunkIndex: metadata.chunkIndex,
-          },
-        });
-      }
-    }
-  }
-
-  console.log(`Found ${searchResults.length} results`);
-
-  return searchResults;
+/** Every stored chunk of one video, in transcript order. */
+export async function getVideoChunks(collectionName: string, videoId: string): Promise<SearchResult[]> {
+  const coll = await getCollection(collectionName);
+  const results = await coll.get({
+    where: { videoId },
+    include: [IncludeEnum.Documents, IncludeEnum.Metadatas],
+  });
+  return results.ids
+    .flatMap((id, i) => {
+      const metadata = results.metadatas?.[i] as Record<string, any> | null | undefined;
+      const document = results.documents?.[i];
+      return metadata && document ? [toSearchResult(id, document, metadata, 1)] : [];
+    })
+    .sort((a, b) => (a.metadata.chunkIndex ?? 0) - (b.metadata.chunkIndex ?? 0));
 }
 
 /**

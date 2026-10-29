@@ -7,18 +7,29 @@ import evalRouter from './routes/eval';
 import explorerRouter from './routes/explorer';
 import channelsRouter from './routes/channels';
 import appRouter from './routes/app';
+import kbRouter from './routes/kb';
+import mcpRouter from './routes/mcp';
 import { resumeUnfinishedIndexing } from './channels/indexer';
 import { config } from './config';
 import { startWorker } from './lib/queue/worker';
 import { initGraph } from './lib/extraction/graph-store';
 import { apiKeyAuth, rateLimit } from './middleware/security';
+import { bodyLimit } from 'hono/body-limit';
 
 const app = new Hono();
 
 app.use('*', cors());
 app.use('*', logger());
+const MAX_BODY_BYTES = 256 * 1024;
+const tooLarge = bodyLimit({
+  maxSize: MAX_BODY_BYTES,
+  onError: (c) => c.json({ success: false, error: 'Request body too large' }, 413),
+});
+app.use('/api/*', tooLarge);
 app.use('/api/*', rateLimit());
 app.use('/api/*', apiKeyAuth());
+app.use('/mcp', rateLimit());
+app.use('/mcp', apiKeyAuth());
 
 app.get('/', (c) =>
   c.json({
@@ -53,6 +64,14 @@ app.get('/', (c) =>
         recent: 'GET|DELETE /api/channels/:id/recent (x-client-id)',
         ask: 'POST /api/channels/:id/ask',
       },
+      kb: {
+        channels: 'GET /api/kb/channels',
+        search: 'POST /api/kb/search { query, channels, limit?, minSimilarity? }',
+        ask: 'POST /api/kb/ask { question, channels, history? }',
+        transcript: 'GET /api/kb/channels/:channelId/videos/:videoId',
+        openapi: 'GET /api/kb/openapi.json',
+        mcp: 'POST /mcp (Streamable HTTP, stateless)',
+      },
       ui: {
         app: 'GET /app',
         explorer: 'GET /explorer',
@@ -68,6 +87,8 @@ app.get('/health', (c) =>
 app.route('/api', youtubeRouter);
 app.route('/api/knowledge', knowledgeRouter);
 app.route('/api/channels', channelsRouter);
+app.route('/api/kb', kbRouter);
+app.route('/mcp', mcpRouter);
 app.route('/api/eval', evalRouter);
 app.route('/explorer', explorerRouter);
 app.route('/app', appRouter);

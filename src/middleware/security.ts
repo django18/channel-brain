@@ -13,8 +13,11 @@ export function apiKeyAuth() {
       return next();
     }
 
-    const provided = c.req.header('x-api-key') ?? '';
-    if (!timingSafeEqual(provided, config.apiKey)) {
+    // x-api-key for REST clients; Authorization: Bearer for MCP clients; either may match
+    const bearer = c.req.header('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1] ?? '';
+    const headerKey = c.req.header('x-api-key') ?? '';
+    const valid = timingSafeEqual(headerKey, config.apiKey) || timingSafeEqual(bearer, config.apiKey);
+    if (!valid) {
       return c.json({ success: false, error: 'Unauthorized' }, 401);
     }
 
